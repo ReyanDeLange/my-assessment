@@ -22,7 +22,12 @@ def question_1():
     Make use of a JOIN to find the `AverageIncome` per `CustomerClass`
     """
 
-    qry = """____________________"""
+    qry = """
+        SELECT cc.CustomerClass, AVG(c.Income) AS AverageIncome
+        FROM credit cc
+        JOIN customers c ON cc.CustomerID = c.CustomerID
+        GROUP BY cc.CustomerClass
+    """
 
     return qry
 
@@ -33,7 +38,25 @@ def question_2():
     Ensure consistent use of either the abbreviated or full version of each province, matching the format found in the customer table.
     """
 
-    qry = """____________________"""
+    qry = """
+        SELECT 
+            SUM(CASE WHEN l.ApprovalStatus = 'Rejected' THEN 1 ELSE 0 END) AS RejectedApplications,
+            CASE 
+                WHEN UPPER(TRIM(c.Region)) IN ('WC', 'WESTERNCAPE') THEN 'Western Cape'
+                WHEN UPPER(TRIM(c.Region)) IN ('GP', 'GT', 'GAUTENG') THEN 'Gauteng'
+                WHEN UPPER(TRIM(c.Region)) IN ('KZN', 'KWAZULU-NATAL') THEN 'KwaZulu-Natal'
+                WHEN UPPER(TRIM(c.Region)) IN ('EC', 'EASTERNCAPE') THEN 'Eastern Cape'
+                WHEN UPPER(TRIM(c.Region)) IN ('FS', 'FREESTATE') THEN 'Free State'
+                WHEN UPPER(TRIM(c.Region)) IN ('MP', 'MPUMALANGA') THEN 'Mpumalanga'
+                WHEN UPPER(TRIM(c.Region)) IN ('LP', 'LIMPOPO') THEN 'Limpopo'
+                WHEN UPPER(TRIM(c.Region)) IN ('NW', 'NORTHWEST') THEN 'North West'
+                WHEN UPPER(TRIM(c.Region)) IN ('NC', 'NORTHERNCAPE') THEN 'Northern Cape'
+                ELSE c.Region
+            END AS Province
+        FROM loans l
+        JOIN customers c ON l.CustomerID = c.CustomerID
+        GROUP BY Province
+    """
 
     return qry
 
@@ -46,7 +69,32 @@ def question_3():
     Do not return the new table, just create it.
     """
 
-    qry = """____________________"""
+    qry = """
+        CREATE TABLE financing (
+            CustomerID INTEGER,
+            Income DECIMAL(10, 2),
+            LoanAmount DECIMAL(10, 2),
+            LoanTerm INTEGER,
+            InterestRate DECIMAL(5, 2),
+            ApprovalStatus VARCHAR(50),
+            CreditScore INTEGER
+        );
+        
+        INSERT INTO financing (CustomerID, Income, LoanAmount, LoanTerm, InterestRate, ApprovalStatus, CreditScore)
+        SELECT 
+            c.CustomerID,
+            c.Income,
+            l.LoanAmount,
+            l.LoanTerm,
+            l.InterestRate,
+            l.ApprovalStatus,
+            cr.CreditScore
+        FROM customers c
+        JOIN loans l ON c.CustomerID = l.CustomerID
+        JOIN credit cr ON c.CustomerID = cr.CustomerID;
+
+        SELECT * FROM financing;
+    """
 
     return qry
 
