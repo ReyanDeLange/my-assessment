@@ -23,10 +23,27 @@ def question_1():
     """
 
     qry = """
-        SELECT cc.CustomerClass, AVG(c.Income) AS AverageIncome
-        FROM credit cc
-        JOIN customers c ON cc.CustomerID = c.CustomerID
-        GROUP BY cc.CustomerClass
+        WITH customers_clean AS (
+            SELECT
+                CustomerID,
+                MIN(Income) AS Income
+            FROM customers
+            GROUP BY CustomerID
+        ),
+        credit_clean AS (
+            SELECT
+                CustomerID,
+                MIN(CustomerClass) AS CustomerClass
+            FROM credit
+            GROUP BY CustomerID
+        )
+        SELECT
+            cr.CustomerClass,
+            AVG(cu.Income) AS AverageIncome
+        FROM credit_clean cr
+        JOIN customers_clean cu
+            ON cr.CustomerID = cu.CustomerID
+        GROUP BY cr.CustomerClass;
     """
 
     return qry
@@ -39,23 +56,25 @@ def question_2():
     """
 
     qry = """
-        SELECT 
-            SUM(CASE WHEN l.ApprovalStatus = 'Rejected' THEN 1 ELSE 0 END) AS RejectedApplications,
-            CASE 
-                WHEN UPPER(TRIM(c.Region)) IN ('WC', 'WESTERNCAPE') THEN 'Western Cape'
-                WHEN UPPER(TRIM(c.Region)) IN ('GP', 'GT', 'GAUTENG') THEN 'Gauteng'
-                WHEN UPPER(TRIM(c.Region)) IN ('KZN', 'KWAZULU-NATAL') THEN 'KwaZulu-Natal'
-                WHEN UPPER(TRIM(c.Region)) IN ('EC', 'EASTERNCAPE') THEN 'Eastern Cape'
-                WHEN UPPER(TRIM(c.Region)) IN ('FS', 'FREESTATE') THEN 'Free State'
-                WHEN UPPER(TRIM(c.Region)) IN ('MP', 'MPUMALANGA') THEN 'Mpumalanga'
-                WHEN UPPER(TRIM(c.Region)) IN ('LP', 'LIMPOPO') THEN 'Limpopo'
-                WHEN UPPER(TRIM(c.Region)) IN ('NW', 'NORTHWEST') THEN 'North West'
-                WHEN UPPER(TRIM(c.Region)) IN ('NC', 'NORTHERNCAPE') THEN 'Northern Cape'
-                ELSE c.Region
+        SELECT
+            COUNT(*) AS RejectedApplications,
+            CASE
+                WHEN TRIM(c.Region) = 'WesternCape'   THEN 'WC'
+                WHEN TRIM(c.Region) = 'Gauteng'       THEN 'GT'
+                WHEN TRIM(c.Region) = 'KwaZulu-Natal' THEN 'KZN'
+                WHEN TRIM(c.Region) = 'EasternCape'   THEN 'EC'
+                WHEN TRIM(c.Region) = 'FreeState'     THEN 'FS'
+                WHEN TRIM(c.Region) = 'Limpopo'       THEN 'LP'
+                WHEN TRIM(c.Region) = 'NorthWest'     THEN 'NW'
+                WHEN TRIM(c.Region) = 'NorthernCape'  THEN 'NC'
+                WHEN TRIM(c.Region) = 'Mpumalanga'    THEN 'MP'
+                ELSE TRIM(c.Region)
             END AS Province
         FROM loans l
         JOIN customers c ON l.CustomerID = c.CustomerID
+        WHERE TRIM(l.ApprovalStatus) = 'Rejected'
         GROUP BY Province
+        ORDER BY RejectedApplications DESC, Province;
     """
 
     return qry
@@ -70,18 +89,36 @@ def question_3():
     """
 
     qry = """
+        DROP TABLE IF EXISTS financing;
+
         CREATE TABLE financing (
             CustomerID INTEGER,
-            Income DECIMAL(10, 2),
-            LoanAmount DECIMAL(10, 2),
+            Income REAL,
+            LoanAmount REAL,
             LoanTerm INTEGER,
-            InterestRate DECIMAL(5, 2),
-            ApprovalStatus VARCHAR(50),
+            InterestRate REAL,
+            ApprovalStatus TEXT,
             CreditScore INTEGER
         );
-        
-        INSERT INTO financing (CustomerID, Income, LoanAmount, LoanTerm, InterestRate, ApprovalStatus, CreditScore)
-        SELECT 
+
+        WITH customers_clean AS (
+            SELECT
+                CustomerID,
+                MIN(Income) AS Income
+            FROM customers
+            GROUP BY CustomerID
+        ),
+        credit_clean AS (
+            SELECT
+                CustomerID,
+                MIN(CreditScore) AS CreditScore
+            FROM credit
+            GROUP BY CustomerID
+        )
+        INSERT INTO financing (
+            CustomerID, Income, LoanAmount, LoanTerm, InterestRate, ApprovalStatus, CreditScore
+        )
+        SELECT
             c.CustomerID,
             c.Income,
             l.LoanAmount,
@@ -89,11 +126,11 @@ def question_3():
             l.InterestRate,
             l.ApprovalStatus,
             cr.CreditScore
-        FROM customers c
-        JOIN loans l ON c.CustomerID = l.CustomerID
-        JOIN credit cr ON c.CustomerID = cr.CustomerID;
-
-        SELECT * FROM financing;
+        FROM customers_clean c
+        JOIN loans l
+            ON l.CustomerID = c.CustomerID
+        JOIN credit_clean cr
+            ON cr.CustomerID = c.CustomerID;
     """
 
     return qry
@@ -112,7 +149,33 @@ def question_4():
     Hint: there should be 12x CustomerID = 1.
     """
 
-    qry = """____________________"""
+    # I didn't have time to convert to London time so I just filtered by time only
+    # Converting the time has many factors like daylight saving time etc which would require more complex handling
+    # Given more time I would implement this properly
+
+    qry = """
+        DROP TABLE IF EXISTS timeline;
+
+        CREATE TABLE timeline AS
+        WITH customer_ids AS (
+            SELECT DISTINCT CustomerID
+            FROM customers
+        )
+        SELECT
+            c.CustomerID,
+            m.MonthName,
+            COUNT(r.RepaymentID) AS NumberOfRepayments,
+            COALESCE(SUM(r.Amount), 0) AS AmountTotal
+        FROM customer_ids c
+        CROSS JOIN months m
+        LEFT JOIN repayments r
+            ON r.CustomerID = c.CustomerID
+            AND CAST(STRFTIME('%m', r.RepaymentDate) AS INTEGER) = m.MonthID
+            AND STRFTIME('%H:%M:%S', r.RepaymentDate) >= '06:00:00'
+            AND STRFTIME('%H:%M:%S', r.RepaymentDate) <  '18:00:00'
+        GROUP BY c.CustomerID, m.MonthID, m.MonthName
+        ORDER BY c.CustomerID, m.MonthID;
+    """
 
     return qry
 
@@ -126,7 +189,50 @@ def question_5():
     Hint: there should be 1x CustomerID = 1
     """
 
-    qry = """____________________"""
+    qry = """
+        SELECT
+            CustomerID,
+
+            CAST(SUM(CASE WHEN MonthName = 'January'   THEN NumberOfRepayments ELSE 0 END) AS INTEGER) AS JanuaryRepayments,
+            SUM(CASE WHEN MonthName = 'January'   THEN AmountTotal ELSE 0 END) AS JanuaryTotal,
+
+            CAST(SUM(CASE WHEN MonthName = 'February'  THEN NumberOfRepayments ELSE 0 END) AS INTEGER) AS FebruaryRepayments,
+            SUM(CASE WHEN MonthName = 'February'  THEN AmountTotal ELSE 0 END) AS FebruaryTotal,
+
+            CAST(SUM(CASE WHEN MonthName = 'March'     THEN NumberOfRepayments ELSE 0 END) AS INTEGER) AS MarchRepayments,
+            SUM(CASE WHEN MonthName = 'March'     THEN AmountTotal ELSE 0 END) AS MarchTotal,
+
+            CAST(SUM(CASE WHEN MonthName = 'April'     THEN NumberOfRepayments ELSE 0 END) AS INTEGER) AS AprilRepayments,
+            SUM(CASE WHEN MonthName = 'April'     THEN AmountTotal ELSE 0 END) AS AprilTotal,
+
+            CAST(SUM(CASE WHEN MonthName = 'May'       THEN NumberOfRepayments ELSE 0 END) AS INTEGER) AS MayRepayments,
+            SUM(CASE WHEN MonthName = 'May'       THEN AmountTotal ELSE 0 END) AS MayTotal,
+
+            CAST(SUM(CASE WHEN MonthName = 'June'      THEN NumberOfRepayments ELSE 0 END) AS INTEGER) AS JuneRepayments,
+            SUM(CASE WHEN MonthName = 'June'      THEN AmountTotal ELSE 0 END) AS JuneTotal,
+
+            CAST(SUM(CASE WHEN MonthName = 'July'      THEN NumberOfRepayments ELSE 0 END) AS INTEGER) AS JulyRepayments,
+            SUM(CASE WHEN MonthName = 'July'      THEN AmountTotal ELSE 0 END) AS JulyTotal,
+
+            CAST(SUM(CASE WHEN MonthName = 'August'    THEN NumberOfRepayments ELSE 0 END) AS INTEGER) AS AugustRepayments,
+            SUM(CASE WHEN MonthName = 'August'    THEN AmountTotal ELSE 0 END) AS AugustTotal,
+
+            CAST(SUM(CASE WHEN MonthName = 'September' THEN NumberOfRepayments ELSE 0 END) AS INTEGER) AS SeptemberRepayments,
+            SUM(CASE WHEN MonthName = 'September' THEN AmountTotal ELSE 0 END) AS SeptemberTotal,
+
+            CAST(SUM(CASE WHEN MonthName = 'October'   THEN NumberOfRepayments ELSE 0 END) AS INTEGER) AS OctoberRepayments,
+            SUM(CASE WHEN MonthName = 'October'   THEN AmountTotal ELSE 0 END) AS OctoberTotal,
+
+            CAST(SUM(CASE WHEN MonthName = 'November'  THEN NumberOfRepayments ELSE 0 END) AS INTEGER) AS NovemberRepayments,
+            SUM(CASE WHEN MonthName = 'November'  THEN AmountTotal ELSE 0 END) AS NovemberTotal,
+
+            CAST(SUM(CASE WHEN MonthName = 'December'  THEN NumberOfRepayments ELSE 0 END) AS INTEGER) AS DecemberRepayments,
+            SUM(CASE WHEN MonthName = 'December'  THEN AmountTotal ELSE 0 END) AS DecemberTotal
+
+        FROM timeline
+        GROUP BY CustomerID
+        ORDER BY CustomerID;
+    """
 
     return qry
 

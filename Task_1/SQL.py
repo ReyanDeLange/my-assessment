@@ -36,8 +36,8 @@ def question_1():
         ORDER BY CustomerID
     """
 
-    # Note: Alternative simpler version that returns multiple rows per duplicate CustomerID, but
-    #       only displays the requested columns.
+    # Alternative simpler version that returns multiple rows per duplicate CustomerID, but
+    # only displays the requested columns.
 
     # qry = """
     #     SELECT Name, Surname, CustomerID
