@@ -103,6 +103,14 @@ def question_1(df_balances):
 
     """
 
+    # Identify loans with any month where ActualRepayment < ScheduledRepayment
+    default_loans = df_balances.loc[
+        df_balances["ActualRepayment"] < df_balances["ScheduledRepayment"], "LoanID"
+]
+
+    # Calculate default rate percentage
+    default_rate_percent = (default_loans.nunique() / df_balances["LoanID"].nunique()) * 100
+
     return default_rate_percent
 
 
@@ -118,6 +126,34 @@ def question_2(df_scheduled, df_balances):
         float: The percentage of type 2 defaulted loans (ie 50.0 not 0.5)
 
     """
+
+    # Type 2 default is evaluated per loan per year. Only full 12-month years are considered.
+    # df_scheduled is unused because df_balances already includes ScheduledRepayment.
+
+    # Calculate years per loan
+    df_yearly_loans = df_balances.copy()
+    df_yearly_loans["Year"] = ((df_yearly_loans["Month"] - 1) // 12) + 1
+
+    #  Calculate total expected and actual repayments per year per loan
+    df_yearly_loans = df_yearly_loans.groupby(["LoanID", "Year"]).agg(
+        Months=("Month", "count"),
+        Expected=("ScheduledRepayment", "sum"),
+        Actual=("ActualRepayment", "sum"),
+    )
+
+    # Filter to only full years (12 months)
+    df_yearly_loans = df_yearly_loans[df_yearly_loans["Months"] == 12]
+
+    # Determine type 2 defaults
+    df_yearly_loans["type_2_default"] = (
+        df_yearly_loans["Actual"] < 0.85 * df_yearly_loans["Expected"]
+    )
+
+    # Determine if each loan defaulted in any year
+    per_loan_default = df_yearly_loans.groupby("LoanID")["type_2_default"].any()
+
+    # Calculate default rate
+    default_rate_percent = 100.0 * per_loan_default.sum() / per_loan_default.shape[0]
 
     return default_rate_percent
 
@@ -136,6 +172,30 @@ def question_3(df_balances):
         float: The anualized CPR of the loan portfolio as a percent.
 
     """
+    # Calculate SMM per month
+    df_cpr = (
+        df_balances.groupby("Month")[["LoanBalanceStart", "ActualRepayment", "ScheduledRepayment"]]
+        .sum()
+        .sort_index()
+    )
+
+    # Use only the first 12 months to match the 12-month geometric mean definition
+    df_cpr = df_cpr.loc[1:12]
+    df_cpr = df_cpr[df_cpr["LoanBalanceStart"] > 0]
+
+    # Calculate Unscheduled Principal
+    df_cpr["UnscheduledPrincipal"] = (
+        df_cpr["ActualRepayment"] - df_cpr["ScheduledRepayment"]
+    ).clip(lower=0)
+
+    # Calculate SMM
+    df_cpr["SMM"] = df_cpr["UnscheduledPrincipal"] / df_cpr["LoanBalanceStart"]
+
+    # Calculate geometric mean SMM
+    smm_mean = (np.prod(1 + df_cpr["SMM"]) ** (1 / 12)) - 1
+
+    # Calculate annualised CPR percent
+    cpr_percent = (1 - (1 - smm_mean) ** 12) * 100
 
     return cpr_percent
 
@@ -155,5 +215,19 @@ def question_4(df_balances):
         float: The predicted total loss for the second year in the loan term.
 
     """
+
+    # Since only first-year repayment data is available, the Year 1 Type 2 default rate is used
+    # as an estimate for the second-year probability of default.
+
+    recovery_rate = 0.8
+
+    # Use Type 2 default probability as it is a more meaningful severity-based metric
+    probability_of_default = question_2(df_scheduled, df_balances) / 100.0
+
+    # Exposure entering Year 2 = total balance at end of Month 12 (end of Year 1)
+    exposure_start_year_2 = df_balances.loc[df_balances["Month"] == 12, "LoanBalanceEnd"].sum()
+
+    # Calculate total loss
+    total_loss = probability_of_default * exposure_start_year_2 * (1.0 - recovery_rate)
 
     return total_loss
