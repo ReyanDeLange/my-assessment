@@ -24,7 +24,7 @@ def question_1():
     """
 
     qry = """
-        SELECT Name, Surname, CustomerID, COUNT(CustomerID) as DuplicateCount
+        SELECT Name, Surname, CustomerID
         FROM customers
         WHERE CustomerID IN (
             SELECT CustomerID
@@ -32,15 +32,12 @@ def question_1():
             GROUP BY CustomerID
             HAVING COUNT(CustomerID) > 1
         )
-        GROUP BY Name, Surname, CustomerID
         ORDER BY CustomerID
     """
 
-    # Alternative simpler version that returns multiple rows per duplicate CustomerID, but
-    # only displays the requested columns.
-
+    # Alternative query that returns the count of duplicates per customer ID instead of listing each duplicate record
     # qry = """
-    #     SELECT Name, Surname, CustomerID
+    #     SELECT Name, Surname, CustomerID, COUNT(CustomerID) as DuplicateCount
     #     FROM customers
     #     WHERE CustomerID IN (
     #         SELECT CustomerID
@@ -48,6 +45,7 @@ def question_1():
     #         GROUP BY CustomerID
     #         HAVING COUNT(CustomerID) > 1
     #     )
+    #     GROUP BY Name, Surname, CustomerID
     #     ORDER BY CustomerID
     # """
 
@@ -78,8 +76,8 @@ def question_3():
 
     qry = """
         SELECT LoanTerm,
-            Round(Sum(100 * CASE WHEN ApprovalStatus = 'Approved' THEN 1 ELSE 0 END)/ COUNT(*), 2) AS ApprovedPercentage
-        FROM Loans
+            Round(Sum(100.0 * CASE WHEN ApprovalStatus = 'Approved' THEN 1 ELSE 0 END)/ COUNT(*), 2) AS ApprovedPercentage
+        FROM loans
         GROUP BY LoanTerm
     """
 
@@ -111,17 +109,5 @@ def question_5():
         SET CustomerClass = 'C'
         WHERE CreditScore BETWEEN 600 AND 650
     """
-
-    # Note: The query below can be used to verify that four of the updated records appear twice
-    # in the credit table. This explains the fact that 275 records were updated but only 271
-    # appear in the C CustomerClass when running question_4 after question_5.
-
-    # qry = """
-    #     SELECT CustomerID, COUNT(*) AS UpdatedRecords
-    #     FROM credit
-    #     WHERE CreditScore BETWEEN 600 AND 650
-    #     GROUP BY CustomerID
-    #     HAVING COUNT(*) > 1
-    # """
 
     return qry
