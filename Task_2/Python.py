@@ -106,7 +106,7 @@ def question_1(df_balances):
     # Identify loans with any month where ActualRepayment < ScheduledRepayment
     default_loans = df_balances.loc[
         df_balances["ActualRepayment"] < df_balances["ScheduledRepayment"], "LoanID"
-]
+    ]
 
     # Calculate default rate percentage
     default_rate_percent = (default_loans.nunique() / df_balances["LoanID"].nunique()) * 100

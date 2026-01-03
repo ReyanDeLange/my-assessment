@@ -157,9 +157,8 @@ def question_4():
     Hint: there should be 12x CustomerID = 1.
     """
 
-    # I didn't have time to convert to London time so I just filtered by time only
-    # Converting the time has many factors like daylight saving time etc which would require more complex handling
-    # Given more time I would implement this properly
+    # London time is assumed to be GMT and timezone abbreviations are treated as fixed offsets.
+    # Daylight saving time is ignored.
 
     qry = """
         DROP TABLE IF EXISTS timeline;
@@ -168,6 +167,25 @@ def question_4():
         WITH customer_ids AS (
             SELECT DISTINCT CustomerID
             FROM customers
+        ),
+        repayments_gmt AS (
+            SELECT
+                RepaymentID,
+                CustomerID,
+                Amount,
+                CASE TimeZone
+                    WHEN 'UTC' THEN RepaymentDate
+                    WHEN 'GMT' THEN RepaymentDate
+                    WHEN 'CET' THEN RepaymentDate - INTERVAL '1 hour'
+                    WHEN 'EET' THEN RepaymentDate - INTERVAL '2 hours'
+                    WHEN 'IST' THEN RepaymentDate - INTERVAL '5 hours 30 minutes'
+                    WHEN 'JST' THEN RepaymentDate - INTERVAL '9 hours'
+                    WHEN 'PST' THEN RepaymentDate + INTERVAL '8 hours'
+                    WHEN 'PNT' THEN RepaymentDate + INTERVAL '7 hours'
+                    WHEN 'CST' THEN RepaymentDate + INTERVAL '6 hours'
+                    ELSE RepaymentDate
+                END AS RepaymentDateGMT
+            FROM repayments
         )
         SELECT
             c.CustomerID,
@@ -176,11 +194,11 @@ def question_4():
             COALESCE(SUM(r.Amount), 0) AS AmountTotal
         FROM customer_ids c
         CROSS JOIN months m
-        LEFT JOIN repayments r
+        LEFT JOIN repayments_gmt r
             ON r.CustomerID = c.CustomerID
-            AND CAST(STRFTIME('%m', r.RepaymentDate) AS INTEGER) = m.MonthID
-            AND STRFTIME('%H:%M:%S', r.RepaymentDate) >= '06:00:00'
-            AND STRFTIME('%H:%M:%S', r.RepaymentDate) <  '18:00:00'
+        AND CAST(STRFTIME('%m', r.RepaymentDateGMT) AS INTEGER) = m.MonthID
+        AND STRFTIME('%H:%M:%S', r.RepaymentDateGMT) >= '06:00:00'
+        AND STRFTIME('%H:%M:%S', r.RepaymentDateGMT) <  '18:00:00'
         GROUP BY c.CustomerID, m.MonthID, m.MonthName
         ORDER BY c.CustomerID, m.MonthID;
     """
