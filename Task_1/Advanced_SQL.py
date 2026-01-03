@@ -56,23 +56,31 @@ def question_2():
     """
 
     qry = """
+        WITH customers_clean AS (
+            SELECT
+                CustomerID,
+                MIN(TRIM(Region)) AS Region
+            FROM customers
+            GROUP BY CustomerID
+        )
         SELECT
             COUNT(*) AS RejectedApplications,
             CASE
-                WHEN TRIM(c.Region) = 'WesternCape'   THEN 'WC'
-                WHEN TRIM(c.Region) = 'Gauteng'       THEN 'GT'
-                WHEN TRIM(c.Region) = 'KwaZulu-Natal' THEN 'KZN'
-                WHEN TRIM(c.Region) = 'EasternCape'   THEN 'EC'
-                WHEN TRIM(c.Region) = 'FreeState'     THEN 'FS'
-                WHEN TRIM(c.Region) = 'Limpopo'       THEN 'LP'
-                WHEN TRIM(c.Region) = 'NorthWest'     THEN 'NW'
-                WHEN TRIM(c.Region) = 'NorthernCape'  THEN 'NC'
-                WHEN TRIM(c.Region) = 'Mpumalanga'    THEN 'MP'
-                ELSE TRIM(c.Region)
+                WHEN c.Region = 'WesternCape'   THEN 'WC'
+                WHEN c.Region = 'Gauteng'       THEN 'GT'
+                WHEN c.Region = 'KwaZulu-Natal' THEN 'KZN'
+                WHEN c.Region = 'EasternCape'   THEN 'EC'
+                WHEN c.Region = 'FreeState'     THEN 'FS'
+                WHEN c.Region = 'Limpopo'       THEN 'LP'
+                WHEN c.Region = 'NorthWest'     THEN 'NW'
+                WHEN c.Region = 'NorthernCape'  THEN 'NC'
+                WHEN c.Region = 'Mpumalanga'    THEN 'MP'
+                ELSE c.Region
             END AS Province
         FROM loans l
-        JOIN customers c ON l.CustomerID = c.CustomerID
-        WHERE TRIM(l.ApprovalStatus) = 'Rejected'
+        JOIN customers_clean c
+            ON l.CustomerID = c.CustomerID
+        WHERE UPPER(TRIM(l.ApprovalStatus)) = 'REJECTED'
         GROUP BY Province
         ORDER BY RejectedApplications DESC, Province;
     """
@@ -253,7 +261,53 @@ def question_6():
     Also return a result set for this table (ie SELECT * FROM corrected_customers)
     """
 
-    qry = """____________________"""
+    qry = """
+        DROP TABLE IF EXISTS corrected_customers;
+
+        CREATE TABLE corrected_customers AS
+        WITH customers_clean AS (
+            SELECT
+                CustomerID,
+                MIN(Age) AS Age,
+                Gender
+            FROM customers
+            GROUP BY CustomerID, Gender
+        ),
+        base AS (
+            SELECT
+                CustomerID,
+                Age,
+                Gender,
+                ROW_NUMBER() OVER (PARTITION BY Gender ORDER BY CustomerID) AS rn,
+                COUNT(*)    OVER (PARTITION BY Gender) AS cnt
+            FROM customers_clean
+        ),
+        shifted AS (
+            SELECT
+                CustomerID,
+                Age,
+                Gender,
+                rn,
+                cnt,
+                CASE
+                    WHEN rn - 2 <= 0 THEN rn - 2 + cnt
+                    ELSE rn - 2
+                END AS src_rn
+            FROM base
+        )
+        SELECT
+            s.CustomerID,
+            s.Age,
+            b2.Age AS CorrectedAge,
+            s.Gender
+        FROM shifted s
+        JOIN base b2
+        ON b2.Gender = s.Gender
+        AND b2.rn = s.src_rn
+        ORDER BY s.Gender, s.CustomerID;
+
+        SELECT * FROM corrected_customers;
+    """
 
     return qry
 
@@ -274,6 +328,43 @@ def question_7():
     Return columns: `CustomerID`, `Age`, `CorrectedAge`, `Gender`, `AgeCategory`, `Rank`
     """
 
-    qry = """____________________"""
+    qry = """
+        WITH repayments_per_customer AS (
+            SELECT
+                CustomerID,
+                COUNT(*) AS RepaymentCount
+            FROM repayments
+            GROUP BY CustomerID
+        ),
+        enriched AS (
+            SELECT
+                cc.CustomerID,
+                cc.Age,
+                cc.CorrectedAge,
+                cc.Gender,
+                CASE
+                    WHEN cc.CorrectedAge < 20 THEN 'Teen'
+                    WHEN cc.CorrectedAge < 30 THEN 'Young Adult'
+                    WHEN cc.CorrectedAge < 60 THEN 'Adult'
+                    ELSE 'Pensioner'
+                END AS AgeCategory,
+                COALESCE(rpc.RepaymentCount, 0) AS RepaymentCount
+            FROM corrected_customers cc
+            LEFT JOIN repayments_per_customer rpc
+                ON rpc.CustomerID = cc.CustomerID
+        )
+        SELECT
+            CustomerID,
+            Age,
+            CorrectedAge,
+            Gender,
+            AgeCategory,
+            DENSE_RANK() OVER (
+                PARTITION BY AgeCategory
+                ORDER BY RepaymentCount DESC
+            ) AS "Rank"
+        FROM enriched
+        ORDER BY AgeCategory, "Rank", CustomerID;
+    """
 
     return qry
